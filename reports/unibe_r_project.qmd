@@ -1,0 +1,535 @@
+---
+title: "HIV testing uptake among women in South Africa"
+author: "Dickman Pangaume Gareta"
+date: "`r date()`"
+format: 
+  html:
+    toc: true
+    #code-fold: show
+    #code-tools: true
+    df-print: paged
+    embed-resources: true
+  pdf:
+   toc: true
+  docx: 
+   toc: true   
+theme: cayman
+editor_options: inlinew
+---
+
+## Introduction
+
+HIV is a public health concern worldwide and efforts are underway to eliminate the virus by 2030. However, knowing one's HIV status is crucial as it provides an entry point into HIV care, treatment and lifelong support. This is especially important in regions with the highest burden of HIV such as the Sub-Saharan Africa. There is documented evidence that HIV incidence is high among women especially those in the older age groups. Therefore, understanding HIV status among women is key in preventing the acquisition of the disease or linking to HIV care and treatment.
+
+The objective of the project is to evaluate the uptake of HIV testing by social demographic factors among women aged between 15 and 49 years in **South Africa**. The data source for this analysis is the *2016 South Africa Demographic and Health Surveys(DHS)*. More info about the survey can be found [here](https://dhsprogram.com/data/Guide-to-DHS-Statistics/).
+
+
+
+```{r include = F}
+
+#| include = false
+# Clear working directory
+
+rm(list = ls())
+gc()
+
+```
+
+
+
+```{r include = F}
+# Load packages
+
+if(!require("pacman")) install.packages("pacman")
+pacman::p_load(tidyverse, here,haven, lubridate,unibeCols,janitor,usethis )
+```
+
+
+
+```{r}
+#| label: data
+#| include: false
+# Load data
+sa_dhs <- haven::read_dta(here("data/ZAIR71FL.DTA"),
+  col_select = c(
+    caseid,
+    v008, # Date of interview (CMC
+    v011, #  Date of birth (CMC)
+    v012, # Respondent's current age
+    v013, # Age in 5-year groups
+    v015, # Result of individual interview
+    v025, # Type of place of residence
+    v102, # Type of place of residence
+    v106, # Highest educational level
+    v107, #  Highest year of education
+    v133, # Education in single years
+    v149, # Educational attainment
+    v190, #  Wealth index combined
+    v190a, # Wealth index for urban/rural
+    v437, # Respondent's weight in kilograms (1 decimal)
+    v438, # Respondent's height in centimeters (1 decimal)
+    v445, # Body Mass Index
+    v454, # Currently pregnant
+    v463a, # Smokes cigarettes
+    v463aa, # Frequency smokes cigarettes
+    v171a, # Use of internet
+    v171b, #  Frequency of using internet last month
+    v120, # Household has: radio
+    v121, #  Household has: television
+    v781, # Ever been tested for HIV
+    v535, # Ever been married or in union
+    v536, #  Recent sexual activity
+    v531, # Age at first sex (imputed)
+    v761, #  Condom used during last sex with most recent
+    v763a, # Had any STI in last 12 months,
+    v453  # Hemoglobin level (g/dl - 1 decimal) 
+  )
+)
+
+```
+
+
+
+```{r include = F}
+
+# Rename variables
+
+sa_dhs_df <- sa_dhs |>
+  rename(
+    idno = caseid,
+    dob = v008,
+    dbo1 = v011,
+    age = v012,
+    age_cat = v013,
+    interview_result = v015,
+    residence = v025,
+    educ_level = v106,
+    educ_level_yr = v107,
+    educ_yr = v133,
+    educ_attain = v149,
+    wealth_index_comb = v190,
+    wealth_index = v190a,
+    weight = v437,
+    height = v438,
+    bmi = v445,
+    preg_current = v454,
+    smoker = v463a,
+    smoke_freq = v463aa,
+    internet_use = v171a,
+    internet_use_month = v171b,
+    hh_radio = v120,
+    hh_tv = v121,
+    hiv_test_ever = v781,
+    married_ever = v535,
+    recent_sex = v536,
+    age_first_sex = v531,
+    condom_use_lsex = v761,
+    had_sti_12m = v763a,
+    hemoglobin = v453  
+  )
+
+
+tempfile(pattern = "_rs_rdf_", fileext = ".rdf")
+
+haven::as_factor(sa_dhs_df) # Converting the labelled data to R factors
+summary(sa_dhs_df$hemoglobin)
+
+```
+
+
+
+```{r include = F}
+
+# Exploratory data analysis
+
+head(sa_dhs_df)
+dim(sa_dhs_df)
+n_distinct(sa_dhs_df)
+
+
+```
+
+
+```{r include = F}
+sa_dhs_df1 <- sa_dhs_df |>
+  mutate(
+    hiv_test_ever_cat = case_when(
+      hiv_test_ever == 1 ~ "Tested before",
+      hiv_test_ever == 0 ~ "Never tested before",
+      TRUE ~ NA
+    ),
+    hiv_test_ever_cat = as.factor(hiv_test_ever_cat) # Change the outcome variable to a factor variable
+  ) |> select(idno,hiv_test_ever, hiv_test_ever_cat, age, bmi, everything())
+
+```
+
+
+
+
+
+```{r echo = F}
+
+# New variables
+
+sa_dhs_df2 <- sa_dhs_df1 |>
+  mutate(
+    wealth_index_cat = case_when(
+      wealth_index == 1 ~ "Poorest",
+      wealth_index == 2 ~ "Poorer",
+      wealth_index == 3 ~ "Middle",
+      wealth_index == 4 ~ "Richer",
+      wealth_index == 5 ~ "Richest",
+      TRUE ~ NA
+    ),
+    .before = wealth_index,
+    
+    # Adding levels to wealth indices
+    
+    wealth_index_cat = factor(
+      wealth_index_cat,
+      levels = c("Poorest",
+                 "Poorer",
+                 "Middle",
+                 "Richer",
+                 "Richest")
+    ),
+    # education level
+    educ_level_cat = case_when(
+      educ_level == 0 ~ "No education",
+      educ_level == 1  ~ "Primary",
+      educ_level == 2 ~ "Secondary",
+      educ_level == 3 ~ "Higher"
+    ),
+    educ_level_cat = factor(
+      educ_level_cat,
+      levels = c("No education",
+                 "Primary",
+                 "Secondary",
+                 "Higher")
+    ),
+    age = as.integer(age),
+    hemoglobin = as.numeric(hemoglobin / 10),
+    age_first_sex = as.integer(age_first_sex),
+    
+    # residence type
+    
+    residence_type = case_when(residence == 1 ~ "Rural",
+                               residence == 2 ~ "Urban",
+                               TRUE ~ "Missing"),
+    weight_kg = (as.numeric(weight)) / 10,
+    #  Adding 1 decimal to the weight in Kg
+    height_m = (as.numeric(height) / 10) / 100,
+    # Adding 1 decimal to the height in cm and convert the height in cm to meters
+    bmi = (as.numeric(bmi) / 100),
+    
+    married_ever = case_when(
+      married_ever == 0 ~ "No",
+      married_ever == 1 ~ "Yes",
+      married_ever == 2 ~ "Lived with a man",
+      TRUE ~ "Missing"
+    ),
+    
+    married_ever = factor(married_ever, levels = c("No",
+                                                   "Yes",
+                                                   "Lived with a man",
+                                                   "Missing")),
+    
+    preg_current = case_when(preg_current == 0 ~ "No",
+                             preg_current == 1 ~ "Yes",
+                             TRUE ~ "Missing"),
+    
+    smoker = case_when(smoker == 0 ~ "No",
+                       smoker == 1 ~ "Yes",
+                       TRUE ~ ""),
+    recent_sex = case_when(
+      recent_sex == 0 ~ "Never had sex",
+      recent_sex == 1 ~ "Active",
+      recent_sex == 2 ~ "Not active",
+      recent_sex == 3 ~ "Not active",
+      TRUE ~ "Missing"
+    ),
+    recent_sex = factor(recent_sex, levels = c("Never had sex",
+                                               "Active",
+                                               "Not active")),
+    condom_use_lsex = case_when(
+      condom_use_lsex == 0 ~ "No",
+      condom_use_lsex == 1 ~ "Yes",
+      TRUE ~ "Missing"),
+    condom_use_lsex = factor(condom_use_lsex, levels = c("No",
+                                                         "Yes",
+                                                         "Missing")),
+    had_sti_12m = case_when(had_sti_12m == 0 ~ "No",
+                            had_sti_12m == 1 ~ "Yes",
+                            TRUE ~ "Missing"),
+    had_sti_12m = factor(had_sti_12m, levels = c("No",
+                                                 "Yes",
+                                                 "Missing")),
+    age_cat = case_when(
+      age_cat == 1 ~ "15 - 19",
+      age_cat == 2 ~ "20 - 24",
+      age_cat == 3 ~ "25 - 29",
+      age_cat == 4 ~ "30 - 34",
+      age_cat == 5 ~ "35 - 39",
+      age_cat == 6 ~ "40 - 44",
+      age_cat == 7 ~ "45 - 49",
+      age_cat == 8 ~ "50+",
+      TRUE ~ "Missing"
+    ),
+    age_cat = factor(
+      age_cat,
+      levels = c(
+        "15 - 19",
+        "20 - 24",
+        "25 - 29",
+        "30 - 34",
+        "35 - 39",
+        "40 - 44",
+        "45 - 49",
+        "50+",
+        "Missing"
+      )
+    ),
+    internet_use = case_when(
+      internet_use == 0 ~ "No",
+      internet_use >= 1 &  internet_use <= 3 ~ "Yes",
+      TRUE ~ "Missing"
+    ),
+    hh_radio = case_when(hh_radio == 0 ~ "No",
+                         hh_radio == 1 ~ "Yes",
+                         TRUE ~ "Missing"),
+    
+    hh_tv = case_when(hh_tv == 0 ~ "No",
+                      hh_tv == 1 ~ "Yes",
+                      TRUE ~ "Missing"),
+    hh_radio = factor(hh_radio, levels = c("No",
+                                           "Yes",
+                                           "Missing")),
+    hh_tv = factor(hh_tv, levels = c("No",
+                                     "Yes",
+                                     "Missing"))
+  )
+
+
+
+```
+
+# Background characteristics
+
+```{r include = F}
+
+# Summary statistics for continuous variables
+
+sa_descrip <- tabyl(sa_dhs_df2$hiv_test_ever_cat)
+sa_dhs_sum <- sa_dhs_df2 |> group_by(hiv_test_ever) |>
+  summarise(
+    median_age = median(age, na.rm = T),
+    mean_age = mean(age, na.rm = T),
+    iqr_age = IQR(age, na.rm = T),
+    mean_bmi = mean(bmi, na.rm = T),
+    sd_bmi = sd(bmi, na.rm = T)
+  )
+
+
+```
+
+```{r include = F}
+
+sa_dhs_sum
+
+sa_dhs_dem <- median(sa_dhs_sum$median_age)
+
+sa_dhs_dem[1]
+
+sa_descrip <- janitor::tabyl(sa_dhs_df2$hiv_test_ever)
+sa_descrip
+dim(sa_dhs_df2)
+
+```
+
+
+```{r include = F}
+
+# By education levels
+
+edu_df <- table(sa_dhs_df2$hiv_test_ever_cat,sa_dhs_df2$educ_level_cat)
+edu_df
+edu_df1 <- prop.table(edu_df, margin = 1)
+edu_df1
+
+# By residence type
+
+res_df <- table(sa_dhs_df2$hiv_test_ever_cat,sa_dhs_df2$residence_type)
+res_df
+res_df1 <- prop.table(res_df, margin = 1)
+res_df1
+
+# By wealth index
+
+wealth_df <- table(sa_dhs_df2$hiv_test_ever_cat,sa_dhs_df2$wealth_index_cat)
+wealth_df
+wealth_df1 <- prop.table(wealth_df, margin = 1)
+wealth_df1
+
+```
+A total of `r nrow(sa_dhs_df2)` women were interviewed during the 2016 Demographic and Health Survey in South Africa. Of these, `r sa_descrip[2,2]` (`r round((sa_descrip[2,3]) * 100)`%) reported to have had HIV test before. 
+
+## Education
+
+
+Majority of the Women who had had an HIV test had secondary school education or higher compared to those who did not have an HIV test (**Figure 1** & **Figure 2**). Of the women who reported to have had an HIV test before, `r edu_df[1,3]`(`r round((edu_df1[1,3]) * 100)`%) had secondary school education. Similarly for those who never had an HIV test before, `r edu_df[2,3]`(`r round((edu_df1[2,3]) * 100)`%) had secondary school education.
+
+
+
+```{r echo = F}
+
+
+sa_dhs_df2 |> ggplot(mapping = aes(x  = hiv_test_ever_cat,
+                                   fill = educ_level_cat)) +
+  geom_bar(position = "fill") +
+  labs(
+    title = "Figure 1: HIV testing by education level",
+    
+    subtitle = "Relationship between  HIV testing and education level among women in South Africa",
+    caption = "Source: 2016 South Africa Demographic and Health Survey(DHS)",
+    y  = "Proportion",
+    x = "Ever been tested for HIV",
+    fill = "Education level"
+  ) +
+  theme_classic() +
+  theme(plot.tag.position = "bottomright")
+```
+
+
+Except the category with no education, the median ages for those who tested for HIV were likely to be greater than the median ages for those who did not test for HIV across different education levels(**Figure 2**).
+
+
+```{r echo = F}
+
+
+# Figure 1: HIV testing by education level
+
+
+
+sa_dhs_box_educ <- sa_dhs_df2 |> ggplot(mapping = aes(y = age,
+                                                        x = hiv_test_ever_cat,
+                                                        fill = hiv_test_ever_cat)) +
+  geom_boxplot(alpha = 0.60,
+               linewidth = 0.70) +
+  theme_classic() +
+  labs(
+    title = "Figure 2:HIV testing associated with increased age in different education levels",
+    subtitle = "Relationship between age and HIV testing by education level among women in South Africa",
+    x = "HIV testing",
+    y = " Age (in years)",
+    caption = "Source: 2016 South Africa Demographic and Health Survey(DHS)",
+    fill = "HIV Test Status"
+  ) +
+  scale_color_manual(values = c("#4C5B5C", "#6B8E7A", "#EFF2A9")) +
+  facet_grid(~ educ_level_cat) +
+  theme(axis.text.x = element_blank()) +
+  geom_jitter(width = 0.2,
+              alpha = 0.03) +
+  stat_summary(
+    fun = "mean",
+    geom = "point",
+    shape = 3,
+    size = 1
+  )
+
+```
+
+```{r echo = F}
+sa_dhs_box_educ
+```
+
+## Residency
+
+
+
+A total of `r res_df[2,1]`(`r round((res_df1[2,1]) * 100)`%) women who reported to have had an HIV test before resided in the rural areas while `r res_df[1,1]`(`r round((res_df1[1,1]) * 100)`%) women who reported not have had an HIV test resided in the rural areas(**Figure 3**).
+
+```{r include = F}
+
+# Figure 2: HIV testing by type of residency
+
+sa_dhs_box_res <- sa_dhs_df2 |> ggplot(mapping = aes(x  = hiv_test_ever_cat,
+                                   fill = residence_type)) +
+  geom_bar(position = "fill") +
+  labs(
+    title = "Figure 3: HIV testing by type of residency",
+    
+    subtitle = "Relationship between  HIV testing and residency among women in South Africa",
+    caption = "Source: 2016 South Africa Demographic and Health Survey(DHS)",
+    y  = "Proportion",
+    x = "Ever been tested for HIV",
+    fill = "Residency type"
+  ) +
+  theme_classic() +
+  theme(plot.tag.position = "bottomright")
+
+```
+
+```{r echo = F}
+sa_dhs_box_res 
+```
+
+## Social economic status
+
+
+Of the women who reported to have had an HIV test before, `r wealth_df[2,3]`(`r round((wealth_df1[2,3]) * 100)`%) were from middle-class households. Similarly for those who never had an HIV test before, `r wealth_df[1,3]`(`r round((wealth_df1[1,3]) * 100)`%) women were from middle-class households (**Figure 4**).
+
+
+
+```{r echo = F}
+
+
+sa_dhs_box_wealth <- sa_dhs_df2 |> ggplot(mapping = aes(
+  y = age,
+  x = reorder(hiv_test_ever_cat, age, median),
+  fill = hiv_test_ever_cat
+)) +
+  geom_boxplot(alpha = 0.60,
+               linewidth = 0.70) +
+  theme_classic() +
+  labs(
+    title = "Figure 4: Increased HIV testing in different social economic strata",
+    subtitle = "Relationship between age and HIV testing by wealth index among women in South Africa",
+    x = "HIV testing",
+    y = " Age (in years)",
+    caption = "Source: 2016 South Africa Demographic and Health Survey(DHS)",
+    fill = "HIV Test Status"
+  ) +
+  scale_color_manual(values = c("#4C5B5C", "#6B8E7A", "#EFF2A9")) +
+  facet_grid(~ wealth_index_cat) +
+  theme(axis.text.x = element_blank()) +
+  geom_jitter(width = 0.2,
+              alpha = 0.05) +
+  stat_summary(
+    fun = "mean",
+    geom = "point",
+    shape = 3,
+    size = 1
+  )
+
+sa_dhs_box_wealth
+
+```
+```{r include = F}
+
+sessionInfo()
+
+```
+
+
+# Conclusion
+
+This capstone project aimed at evaluating the uptake of HIV testing by social demographic factors among women aged between 15 and 49 years in South Africa. The project findings include the following:
+
+- HIV testing uptake increases with social economic status of the individuals e.g., education level and wealth index of the household
+
+The recommendation for this project is to encourage interventions aimed at increasing levels of education among women. 
+
+# Reference
+
+- [The DHS Program: Demographic and Health Surveys](https://dhsprogram.com/)
+
